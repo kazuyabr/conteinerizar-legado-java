@@ -1,0 +1,45 @@
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Docker
+.docker/
+
+# Build artifacts
+*.log
+*.tmp
+*.class
+
+# IDE files
+.classpath
+.project
+.settings/
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Segredos e configuracao local
+conf/application-tu.properties
+conf/keystore.jks
+conf/fix_server.py
+conf/server_new.xml
+.env
+config-tu.rar
+
+# Scripts de teste/decompile (nao necessarios para deploy)
+decompile*.sh
+find_awb.sh
+fix_faces.sh
+test.jsp
+TestFile.java
+TestInit.java
+TestProps.java
+
+# OpenCode/Graft (cache local)
+.opencode/
+.vibecoding/
+
+# Claude
+.claude/

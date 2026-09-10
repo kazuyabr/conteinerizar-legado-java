@@ -1,0 +1,26 @@
+services:
+  tomcat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: legacy-tomcat
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../:/app/src
+      - tomcat-webapps:/opt/tomcat/webapps
+      - tomcat-logs:/opt/tomcat/logs
+    environment:
+      - CATALINA_OPTS=-Xms512m -Xmx2048m -XX:PermSize=256m -XX:MaxPermSize=512m
+      - JAVA_OPTS=-Xms512m -Xmx2048m -XX:PermSize=256m -XX:MaxPermSize=512m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "http://localhost:8080/npco/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+
+volumes:
+  tomcat-webapps:
+  tomcat-logs:
