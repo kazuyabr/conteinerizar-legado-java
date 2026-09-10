@@ -181,3 +181,26 @@ docker compose exec tomcat grep 'encoding=' /build/src/npco_base/Empacotamento/A
 - Logs são salvos em `/opt/tomcat/logs` e `/tmp/entrypoint.log`
 - O ambiente é agnóstico - funciona com qualquer branch do Git
 - Java encoding: `windows-1252` (patch automático nos build.xml)
+
+## Testes Realizados
+
+### npco (Principal)
+- ✅ Build completo (CORE + WAR)
+- ✅ Deploy no Tomcat
+- ✅ Login mock funcional (I919852/cambio11)
+- ✅ Página inicial carrega corretamente
+
+### npco_analise
+- ✅ Build e deploy
+- ✅ Mock login funcional (BASIC auth: I919852/cambio11)
+- ⚠️ Agent-browser: Erro `ERR_INVALID_AUTH_CREDENTIALS` (limitação do browser, não do container)
+- ✅ curl com credenciais funciona perfeitamente
+
+### Credenciais Mock (login-mock.xml)
+```xml
+<userList userName="I919852" userPassword="cambio11">
+  <userGroups groupName="NPCO0001" />
+  <userGroups groupName="NPCO0002" />
+  <!-- ... mais grupos ... -->
+</userList>
+```
