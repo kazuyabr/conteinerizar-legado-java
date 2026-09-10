@@ -15,7 +15,7 @@ services:
       - JAVA_OPTS=-Xms512m -Xmx2048m -XX:PermSize=256m -XX:MaxPermSize=512m
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "http://localhost:8080/npco/"]
+      test: ["CMD-SHELL", "curl -s http://localhost:8080/npco/ | grep -q 'Banco Bradesco' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
