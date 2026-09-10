@@ -35,9 +35,11 @@ WAR_ANT_TARGET="create-war"
 CORE_ANT_TARGET=""
 
 FORCE_REBUILD="false"
+HOTRELOAD="false"
 for arg in "$@"; do
     case "$arg" in
         --force-rebuild) FORCE_REBUILD="true" ;;
+        --hotreload) HOTRELOAD="true" ;;
     esac
 done
 
@@ -99,19 +101,37 @@ start_tomcat() {
 }
 
 # ============================================
+# FUNCAO: Gerar hash das fontes (rapido)
+# ============================================
+source_hash() {
+    local src_dir="$1"
+    # Hash baseado em timestamps dos dirs pai (muito mais rapido que find)
+    find "$src_dir" -maxdepth 2 -name "*.java" -o -name "*.xml" 2>/dev/null | xargs stat -c '%Y' 2>/dev/null | sort | md5sum | cut -d' ' -f1
+}
+
+# ============================================
 # CHECK DE CACHE
 # ============================================
 if [ -f "$CACHE_MARKER" ] && [ "$FORCE_REBUILD" = "false" ]; then
     log "Build cache encontrado em $CACHE_MARKER"
-    log "Pulando compilacao (use --force-rebuild para recompilar)"
-    # Recriar shim openwebbeans-el
-    recreate_owb_shim
-    start_tomcat
+    
+    # Verificar hash das fontes vs hash salvo
+    CURRENT_HASH=$(source_hash "$SRC_DIR")
+    SAVED_HASH=$(cat /build/.source_hash 2>/dev/null || echo "none")
+    
+    if [ "$CURRENT_HASH" = "$SAVED_HASH" ]; then
+        log "Fontes inalteradas (hash: $CURRENT_HASH). Pulando build."
+        recreate_owb_shim
+        start_tomcat
+    fi
+    
+    log "Mudancas detectadas (hash mudou). Executando rebuild..."
 fi
 
 log "Diretorio fonte: $SRC_DIR"
 log "Dependencias: $DEPS_DIR"
 log "Force rebuild: $FORCE_REBUILD"
+log "Hotreload: $HOTRELOAD"
 
 if [ ! -d "$SRC_DIR" ]; then
     log "ERRO: Diretorio fonte nao encontrado: $SRC_DIR"
@@ -456,5 +476,6 @@ recreate_owb_shim
 
 rm -rf "$BUILD_DIR"
 touch "$CACHE_MARKER"
+source_hash "$SRC_DIR" > /build/.source_hash
 
 start_tomcat
