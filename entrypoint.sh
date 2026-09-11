@@ -26,7 +26,7 @@ PROJECT_PATTERN="*"
 # Projetos ignorados (regex separada por |)
 # Inclui pastas de libs, pastas do Eclipse, e pastas nao-projeto
 # Usar ^ e $ para correspondencia exata quando necessario
-IGNORE_PATTERN="^.*-lib-.*$|^Servers$|^RemoteSystemsTempFiles$|^WDE$|^automation$|^base$|^br$|^docker$|^docker-legacy$|^graft$|^node_modules$"
+IGNORE_PATTERN="^.*-lib-.*$|^Servers$|^RemoteSystemsTempFiles$|^WDE$|^automation$|^base$|^br$|^docker$|^docker-legacy$|^graft$|^node_modules$|^npco_gestores$"
 
 # Target Ant para WARs (create-war evita EAR)
 WAR_ANT_TARGET="create-war"

@@ -217,3 +217,11 @@ docker compose exec tomcat grep 'encoding=' /build/src/npco_base/Empacotamento/A
   <!-- ... mais grupos ... -->
 </userList>
 ```
+
+## Projetos Ignorados
+
+| Projeto | Motivo |
+|---------|--------|
+| `npco_gestores` | 29 erros de compilação — pacote `br.com.bradesco.envio.*` ausente (problema do projeto, não do Docker) |
+| `npco-lib-01-npco-base` | Pasta de dependências |
+| `*-lib-*` | Pastas de dependências genéricas |
