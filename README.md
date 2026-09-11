@@ -37,17 +37,30 @@ ANALISEIA/
 ## Uso Rápido
 
 ```bash
-# 1. Navegue até a pasta do docker-legacy
-cd docker-legacy
+# 1. Clone o repositorio ao lado dos projetos
+git clone https://github.com/kazuyabr/conteinerizar-legado-java.git docker-legacy
 
-# 2. Suba o ambiente (1ª vez: ~15-20 min, depois: ~5 seg)
+# 2. Estrutura esperada:
+#    ANALISEIA/
+#    ├── docker-legacy/     ← este repo
+#    ├── npco/              ← fonte
+#    ├── npco_analise/      ← fonte
+#    ├── npco_base/         ← CORE
+#    └── docker/deps/       ← JARs de dependencia
+
+# 3. Configurar application-tu.properties (opcional)
+cp conf/application-tu.properties.example conf/application-tu.properties
+# Edite com credenciais reais
+
+# 4. Suba o ambiente (1ª vez: ~15-20 min, depois: ~5 seg)
 docker compose up -d
 
-# 3. Acompanhe os logs
+# 5. Acompanhe os logs
 docker compose logs -f tomcat
 
-# 4. Acesse a aplicação
+# 6. Acesse a aplicacao
 # http://localhost:8080/npco
+# http://localhost:8080/npco_analise
 ```
 
 ## Comandos Úteis
@@ -120,6 +133,21 @@ O `entrypoint.sh` executa automaticamente:
 9. **Tomcat**: Inicia com SingleSignOn habilitado
 
 ## Configuração
+
+### Config TU (application-tu.properties)
+
+O arquivo `conf/application-tu.properties` contém configurações sensíveis (credenciais, IPs internos). Por isso:
+
+- **Versionado:** `conf/application-tu.properties.example` (template com placeholders)
+- **Ignorado:** `conf/application-tu.properties` (credenciais reais)
+
+**Para configurar:**
+```bash
+cp conf/application-tu.properties.example conf/application-tu.properties
+# Edite com credenciais reais
+```
+
+**Para usar sem config TU:** O entrypoint cria automaticamente a partir do template se não existir. As aplicações funcionarão com configurações padrão (sem acesso a endpoints TU).
 
 ### Memória (CATALINA_OPTS)
 
