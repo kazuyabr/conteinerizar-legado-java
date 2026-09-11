@@ -65,9 +65,9 @@ securityManager.authentication.defaultTargetUrl=/index.jsf
 securityManager.authentication.forceHttps=false
 
 #################### ENCRYPTION #######################
-securityManager.encryption.salt=<SALT>
+securityManager.encryption.salt=SALT1234
 securityManager.encryption.iterations=20
-securityManager.encryption.key=<CHAVE_CRIPTOGRAFIA>
+securityManager.encryption.key=ESSA E UMA CHAVE FALSA PARA DESENVOLVIMENTO
 
 ###########################################################################
 ################## Filter Manager related settings ######################

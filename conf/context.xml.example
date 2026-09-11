@@ -1,6 +1,15 @@
 <Context>
+    <!-- JAASRealm para Mock Login -->
+    <Realm className="org.apache.catalina.realm.JAASRealm" appName="BradescoLDAPLogin"
+        userClassNames="br.com.bradesco.web.aq.application.security.authentication.userdetails.impl.BradescoUserDetailsJAASImpl"
+        roleClassNames="br.com.bradesco.web.aq.application.security.authorization.impl.BradescoAuthorityImpl" />
+
+    <!-- BeanManager CDI -->
+    <Resource name="BeanManager" auth="Container"
+        type="javax.enterprise.inject.spi.BeanManager"
+        factory="org.apache.webbeans.container.ManagerObjectFactory" />
+
     <!-- Oracle DataSource - Configuracao TU -->
-    <!-- Copie este arquivo para context.xml e preencha com credenciais reais -->
     <Resource name="jdbc/intranet_npco_npcod000_oracle"
               auth="Container"
               type="javax.sql.DataSource"
