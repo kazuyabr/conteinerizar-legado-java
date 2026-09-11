@@ -196,6 +196,19 @@ docker compose exec tomcat grep 'encoding=' /build/src/npco_base/Empacotamento/A
 - ⚠️ Agent-browser: Erro `ERR_INVALID_AUTH_CREDENTIALS` (limitação do browser, não do container)
 - ✅ curl com credenciais funciona perfeitamente
 
+## Status VPN / Endpoints TU
+
+| Endpoint | Status | Nota |
+|----------|--------|------|
+| FWOP (10.193.103.17) | ❌ Inacessível | VPN não conectada ou endpoint off |
+| CWS (10.193.93.48:3130) | ❌ Inacessível | VPN não conectada ou endpoint off |
+| FileNet (ecmweb...) | ❌ Inacessível | VPN não conectada ou endpoint off |
+| WSDE (10.192.60.133:9081) | ❌ Inacessível | VPN não conectada ou endpoint off |
+
+**Limitação conhecida:** Docker Desktop Windows roda containers numa Linux VM (WSL2). Mesmo com VPN conectada no host Windows, o container **não herda** a rede do host. `network_mode: host` também não funciona porque a VM tem sua própria stack de rede.
+
+**Workaround:** Usar config TU em `conf/application-tu.properties` com IPs mockados ou aguardar VPN ativa para testes reais.
+
 ### Credenciais Mock (login-mock.xml)
 ```xml
 <userList userName="I919852" userPassword="cambio11">
