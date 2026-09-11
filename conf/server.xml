@@ -12,6 +12,23 @@
               description="User database that can be updated and saved"
               factory="org.apache.catalina.users.MemoryUserDatabaseFactory"
               pathname="conf/tomcat-users.xml" />
+
+    <!-- Oracle DataSource - Configuracao TU -->
+    <Resource name="jdbc/intranet_npco_npcod000_oracle"
+              auth="Container"
+              type="javax.sql.DataSource"
+              driverClassName="oracle.jdbc.OracleDriver"
+              url="jdbc:oracle:thin:@//10.73.21.106:1521/xe"
+              username="admin"
+              password="admin"
+              maxActive="20"
+              maxIdle="10"
+              maxWait="-1"
+              validationQuery="SELECT 1 FROM DUAL"
+              testOnBorrow="true"
+              testWhileIdle="true"
+              timeBetweenEvictionRunsMillis="30000"
+              minEvictableIdleTimeMillis="60000" />
   </GlobalNamingResources>
 
   <Service name="Catalina">

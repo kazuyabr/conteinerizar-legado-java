@@ -57,6 +57,12 @@ start_tomcat() {
         log "Config TU criada a partir do template (preencha com credenciais reais)"
     fi
     
+    # Criar context.xml a partir do example se nao existir
+    if [ ! -f "/conf/context.xml" ] && [ -f "/conf/context.xml.example" ]; then
+        cp "/conf/context.xml.example" "/conf/context.xml"
+        log "Context.xml criada a partir do template (preencha com credenciais reais)"
+    fi
+    
     # Criar diretorios externos de configuracao
     for war_dir in "$WEBAPPS_DIR"/*/; do
         [ -d "$war_dir" ] || continue
@@ -85,6 +91,12 @@ start_tomcat() {
             [ -f "$war_dir/WEB-INF/classes/logback-catalog.xml" ] && [ ! -f "/suportedbdc_config/intranet/$wname/logback-catalog.xml" ] && cp "$war_dir/WEB-INF/classes/logback-catalog.xml" "/suportedbdc_config/intranet/$wname/logback-catalog.xml" 2>/dev/null
             # externalMappingFile vazio se nao existir
             [ ! -f "/suportedbdc_config/intranet/$wname/externalMappingFile.properties" ] && touch "/suportedbdc_config/intranet/$wname/externalMappingFile.properties" 2>/dev/null
+            # Injetar context.xml com DataSource Oracle
+            if [ -f "/conf/context.xml" ]; then
+                mkdir -p "$war_dir/META-INF"
+                cp "/conf/context.xml" "$war_dir/META-INF/context.xml" 2>/dev/null
+                log "Context.xml injetado em $wname"
+            fi
             log "Config externa configurada para $wname"
         fi
     done

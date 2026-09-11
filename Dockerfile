@@ -44,6 +44,8 @@ ENV CATALINA_OPTS="-Xms512m -Xmx2048m -XX:PermSize=256m -XX:MaxPermSize=512m"
 
 COPY conf/server.xml $CATALINA_HOME/conf/server.xml
 COPY conf/application-tu.properties.example /conf/application-tu.properties.example
+COPY conf/ojdbc8.jar $CATALINA_HOME/lib/ojdbc8.jar
+COPY conf/context.xml.example /conf/context.xml.example
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
