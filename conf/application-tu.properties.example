@@ -1,0 +1,170 @@
+######################################################################
+################## Application related settings ######################
+# Configuracao PADRAO TU (Teste/Desenvolvimento)
+# Este arquivo e usado quando NAO existe config externa montada
+#
+# INSTRUCOES:
+# 1. Copie este arquivo para application-tu.properties
+# 2. Preencha os valores marcados com <PLACEHOLDER>
+# 3. NAO faca commit do arquivo application-tu.properties (contem credenciais)
+
+##########################################################################
+################## Monitor Manager related settings ######################
+##########################################################################
+monitorManager.domain=AWB_Monitor_npco
+monitorManager.active=true
+monitorManager.channel=intranet
+monitorManager.customMonitors=npcoStatistics
+
+##########################################################################
+################## Session Manager related settings ######################
+##########################################################################
+sessionManager.ttl=28800000
+
+######### CONFIGURACAO DA INICIALIZACAO DA APLICACAO  #################
+objectManager.application.atribute.applicatonId.name=APPLICATION_ID
+objectManager.application.atribute.applicatonId.value=INTRANET
+
+objectManager.application.atribute.botao.detalhe.name=BOTAO_MAIS_DETALHES
+objectManager.application.atribute.botao.detalhe.value=true
+
+objectManager.application.atribute.productId.name=PRODUCT_ID
+objectManager.application.atribute.productId.value=Intranet
+
+objectManager.application.atribute.languageId.name=LANGUAGE_ID
+objectManager.application.atribute.languageId.value=1
+
+########################################################################
+################## Error Manager related settings ######################
+########################################################################
+errorManager.config.default.requiredLog=true
+errorManager.config.default.requiredLogout=false
+errorManager.config.default.requiredAlert=false
+errorManager.config.default.exceptionHandler=defaultExceptionHandler
+errorManager.config.default.exceptionType=java.lang.Exception
+errorManager.config.default.redirectMessageId=error.message.key
+errorManager.config.default.path=/exception.xhtml
+
+########################################################################
+################## Alert Manager related settings ######################
+########################################################################
+alertManager.fileEmitter.path=/tmp
+alertManager.fileEmitter.fileName=alertasFileEmitter.txt
+
+######################################################################
+################## Log Manager related settings ######################
+######################################################################
+logManager.catalog.path=/WEB-INF/classes/logback-catalog.xml
+logManager.catalog.delay=60
+logManager.catalog.externalPath=/suportedbdc_config/intranet/npco/logback-catalog.xml
+logManager.catalog.jvmArgumentName=logbackCatalog
+logManager.catalog.variablePreExternalLocation=apps.config
+
+#################### AUTHENTICATION #######################
+securityManager.authentication.defaultTargetUrl=/index.jsf
+securityManager.authentication.forceHttps=false
+
+#################### ENCRYPTION #######################
+securityManager.encryption.salt=<SALT>
+securityManager.encryption.iterations=20
+securityManager.encryption.key=<CHAVE_CRIPTOGRAFIA>
+
+###########################################################################
+################## Filter Manager related settings ######################
+##########################################################################
+filterManager.timeout.failureUrl=/totalTimeoutExpired.xhtml
+
+################## CONFIGURACAO MENU. ######################
+service.menuProvider.component.path=/WEB-INF/classes/menu-catalog.xml
+
+################## Mapeamento de Roles da Aplicacao ######################
+securityManager.internalMappingFile=/internalMappingFile.properties
+securityManager.externalMappingFile=/suportedbdc_config/intranet/npco/externalMappingFile.properties
+
+################## CONFIGURACAO ERROR CATALOG. ######################
+exception.catalog.file=/WEB-INF/classes/error-catalog.xml
+
+################## CONFIGURACAO APPLICATION EXTERNAL. ######################
+external.properties=/suportedbdc_config/intranet/npco/application.properties
+
+################## CONFIGURACAO PARA CONECTORES AWB CWS. ######################
+cws.ipconnector=<IP_CWS>
+cws.portCWS=<PORTA_CWS>
+
+################## CONFIGURACAO JAAS. ######################
+conectores.login.sso=false
+securityManager.jaas.was.loginModule=BradescoMockLogin
+
+################## GCC ##################
+service.endpoint.integracao.filenetce=<URL_FILENET_CE>
+service.endpoint.integracao.filenetceimagem=<URL_FILENET_IMAGEM>
+service.endpoint.integracao.facade=<URL_FACADE>
+service.endpoint.integracao.w3org.xmlschema=http://www.w3.org/2001/XMLSchema
+
+################## FWOP ########################################
+AWB.fwop.adapter.ConsultaDocumento.group=Documento
+AWB.fwop.adapter.ConsultaDocumento.description=Documento
+AWB.fwop.adapter.ConsultaDocumento.serviceName=GCTCO000
+AWB.fwop.adapter.ConsultaDocumento.serviceVersion=1.0
+AWB.fwop.adapter.ConsultaDocumento.serviceLogicalName=GCTC.OI.DOCUMENTO.CONSULTADOCUMENTO
+AWB.fwop.adapter.ConsultaDocumento.baseClassRequestName=ConsultaDocumentoRequest
+AWB.fwop.adapter.ConsultaDocumento.baseClassResponseName=ConsultaDocumentoResponse
+AWB.fwop.adapter.ConsultaDocumento.adapterPackage=br.com.bradesco.web.npco.dossieeletronico.service.ws.fwop.documento
+AWB.fwop.adapter.ConsultaDocumento.factoryId=fwopFactoryAdapter
+AWB.fwop.adapter.ConsultaDocumento.factoryPackage=br.com.bradesco.web.npco.dossieeletronico.service.ws.fwop
+AWB.fwop.adapter.ConsultaDocumento.factoryClassName=FwopFactoryAdapter
+AWB.fwop.adapter.ConsultaDocumento.fwopConnector=fwopConnector
+
+AWB.fwop.adapter.ConsultaProcesso.group=Processo
+AWB.fwop.adapter.ConsultaProcesso.description=Processo
+AWB.fwop.adapter.ConsultaProcesso.serviceName=GCTCO001
+AWB.fwop.adapter.ConsultaProcesso.serviceVersion=1.0
+AWB.fwop.adapter.ConsultaProcesso.serviceLogicalName=GCTC.OI.PROCESSO.CONSULTAPROCESSO
+AWB.fwop.adapter.ConsultaProcesso.baseClassRequestName=ConsultaProcessoRequest
+AWB.fwop.adapter.ConsultaProcesso.baseClassResponseName=ConsultaProcessoResponse
+AWB.fwop.adapter.ConsultaProcesso.adapterPackage=br.com.bradesco.web.npco.dossieeletronico.service.ws.fwop.processo
+AWB.fwop.adapter.ConsultaProcesso.factoryId=fwopFactoryAdapter
+AWB.fwop.adapter.ConsultaProcesso.factoryPackage=br.com.bradesco.web.npco.dossieeletronico.service.ws.fwop
+AWB.fwop.adapter.ConsultaProcesso.factoryClassName=FwopFactoryAdapter
+AWB.fwop.adapter.ConsultaProcesso.fwopConnector=fwopConnector
+
+fwopSessaoAWB.codigoCanal=2
+fwopSessaoAWB.codigoDependenciaOperante=4253
+fwopSessaoAWB.codigoEmpresaOperante=1
+fwopSessaoAWB.codigoIdioma=4
+
+# FWOP Core TU
+fwopConfiguracaoAWB.urlFwopCore=<URL_FWOP>
+
+fwop.parametro.codigo.processo=3
+
+################## CONFIGURACAO BASE DE DADOS ######################
+db.datasource.name=jdbc/intranet_npco_npcod000_oracle
+
+####################### WEBSERVICE: ###############################
+service.endpoint.integracao.wsde=<URL_WSDE>
+service.endpoint.integracao.change.contasme=<URL_CONTASME>
+service.gcc.id.usuario=<USUARIO_GCC>
+
+################## SEI #######################
+sei.conf.avaliable_filetypes=pdf,txt,odt,xmld,xls,csv,ods,xmls,qif,ofx,ofc,html,xhtml
+sei.conf.xslt_folder=/br/com/bradesco/web/aq/view/sei/xsl
+sei.converter.odstoxslrules=/br/com/bradesco/web/aq/view/sei/custom/odstoxlsrules.xml
+
+################## INTEGRACAO - AS Convivencia Token ######################
+service.endpoint.integracao.convivencia.token.url=<URL_TOKEN>
+service.endpoint.integracao.convivencia.token.client.id=<CLIENT_ID>
+service.endpoint.integracao.convivencia.token.client.secret=<CLIENT_SECRET>
+
+################## WEBSERVICES ######################
+service.endpoint.integracao.change.contasme=<URL_CONTASME>
+
+################## USUARIO DE SEGURANCA ##################
+cws.gsegaa.id.usuario=<USUARIO_SEGuranca>
+cws.gsegaa.frmt.usuario=S
+cws.gsegae.id.tp.auten=006
+cws.gsegae.ind.atlz.pswd=N
+cws.frwkgl01.ccanal=502
+cws.frwkgl01.tusuar.segrc=S
+cws.frwkgl01.cidtfd.perif=AutoAtendimento
+cws.gcc.id.usuario=<USUARIO_GCC_MANAGER>

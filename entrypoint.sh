@@ -51,6 +51,12 @@ log() {
 # FUNCAO: Iniciar Tomcat
 # ============================================
 start_tomcat() {
+    # Criar config TU a partir do example se nao existir
+    if [ ! -f "/conf/application-tu.properties" ] && [ -f "/conf/application-tu.properties.example" ]; then
+        cp "/conf/application-tu.properties.example" "/conf/application-tu.properties"
+        log "Config TU criada a partir do template (preencha com credenciais reais)"
+    fi
+    
     # Criar diretorios externos de configuracao
     for war_dir in "$WEBAPPS_DIR"/*/; do
         [ -d "$war_dir" ] || continue
