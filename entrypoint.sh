@@ -48,13 +48,45 @@ log() {
 }
 
 # ============================================
+# FUNCAO: Aplicar defaults TU em arquivo de config
+# Substitui placeholders residuais por valores reais
+# ============================================
+apply_tu_defaults() {
+    local cfg="$1"
+    [ -f "$cfg" ] || return 0
+    # CWS
+    sed -i 's|<IP_CWS>|10.193.93.48|g' "$cfg" 2>/dev/null
+    sed -i 's|<PORTA_CWS>|3130|g' "$cfg" 2>/dev/null
+    # FWOP
+    sed -i 's|<URL_FWOP>|http://10.193.103.17/FWOP|g' "$cfg" 2>/dev/null
+    # FileNet
+    sed -i 's|<URL_FILENET_CE>|https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenet_ce_ws/services/IntegracaoFileNetCE?wsdl|g' "$cfg" 2>/dev/null
+    sed -i 's|<URL_FILENET_IMAGEM>|https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenetceimagem_ws/services/IntegracaoFileNetCEImagem?wsdl|g' "$cfg" 2>/dev/null
+    # Facade GCC
+    sed -i 's|<URL_FACADE>|https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenet_ce_ws/services/IntegracaoFileNetCE|g' "$cfg" 2>/dev/null
+    # WSDE
+    sed -i 's|<URL_WSDE>|http://10.192.60.133:9081/npco_dossie_ws/DossieEletronico?wsdl|g' "$cfg" 2>/dev/null
+    # ContasMe
+    sed -i 's|<URL_CONTASME>|http://10.194.57.136:10050/ContasMeService.svc?singleWsdl|g' "$cfg" 2>/dev/null
+    # Usuarios GCC
+    sed -i 's|<USUARIO_GCC>|intranet_npco_dusrecm1|g' "$cfg" 2>/dev/null
+    sed -i 's|<USUARIO_GCC_MANAGER>|intranet_npco_dusrecm1|g' "$cfg" 2>/dev/null
+    sed -i 's|<USUARIO_SEGuranca>|UAPNPCO|g' "$cfg" 2>/dev/null
+    # Token convivencia (mock - desabilitado)
+    sed -i 's|<URL_TOKEN>|http://localhost:0/mock-token|g' "$cfg" 2>/dev/null
+    sed -i 's|<CLIENT_ID>|mock-client-id|g' "$cfg" 2>/dev/null
+    sed -i 's|<CLIENT_SECRET>|mock-client-secret|g' "$cfg" 2>/dev/null
+}
+
+# ============================================
 # FUNCAO: Iniciar Tomcat
 # ============================================
 start_tomcat() {
-    # Criar config TU a partir do example se nao existir
-    if [ ! -f "/conf/application-tu.properties" ] && [ -f "/conf/application-tu.properties.example" ]; then
+    # Sempre criar/atualizar config TU a partir do template (docker self-contained)
+    if [ -f "/conf/application-tu.properties.example" ]; then
         cp "/conf/application-tu.properties.example" "/conf/application-tu.properties"
-        log "Config TU criada a partir do template (preencha com credenciais reais)"
+        apply_tu_defaults "/conf/application-tu.properties"
+        log "Config TU atualizada a partir do template"
     fi
     
     # Criar context.xml a partir do example se nao existir
@@ -72,21 +104,19 @@ start_tomcat() {
         esac
         if [ -f "$war_dir/WEB-INF/application.properties" ]; then
             mkdir -p "/suportedbdc_config/intranet/$wname"
-            # Usar config externa se existir (volume montado do host)
-            if [ ! -f "/suportedbdc_config/intranet/$wname/application.properties" ]; then
-                # Config externa nao existe - usar config TU padrao
-                if [ -f "/conf/application-tu.properties" ]; then
-                    cp "/conf/application-tu.properties" "/suportedbdc_config/intranet/$wname/application.properties" 2>/dev/null
-                    log "Config TU padrao aplicada para $wname"
-                else
-                    cp "$war_dir/WEB-INF/application.properties" "/suportedbdc_config/intranet/$wname/application.properties" 2>/dev/null
-                    log "Config copiada de WebContent para $wname (sem config externa nem TU padrao)"
-                fi
+            # Sempre atualizar config externa a partir do template (docker self-contained)
+            if [ -f "/conf/application-tu.properties" ]; then
+                cp "/conf/application-tu.properties" "/suportedbdc_config/intranet/$wname/application.properties" 2>/dev/null
+                apply_tu_defaults "/suportedbdc_config/intranet/$wname/application.properties"
+                log "Config TU atualizada para $wname"
             else
-                log "Config externa existente mantida para $wname"
+                cp "$war_dir/WEB-INF/application.properties" "/suportedbdc_config/intranet/$wname/application.properties" 2>/dev/null
+                log "Config copiada de WebContent para $wname (sem config TU)"
             fi
             # Corrigir external.properties para caminho completo do arquivo
             sed -i "s|^external.properties = /suportedbdc_config/intranet/$wname.*|external.properties = /suportedbdc_config/intranet/$wname/application.properties|" "$war_dir/WEB-INF/application.properties" 2>/dev/null
+            # Aplicar defaults TU no config externo (substitui placeholders residuais)
+            apply_tu_defaults "/suportedbdc_config/intranet/$wname/application.properties"
             # Copiar logback-catalog.xml se existir nas classes
             [ -f "$war_dir/WEB-INF/classes/logback-catalog.xml" ] && [ ! -f "/suportedbdc_config/intranet/$wname/logback-catalog.xml" ] && cp "$war_dir/WEB-INF/classes/logback-catalog.xml" "/suportedbdc_config/intranet/$wname/logback-catalog.xml" 2>/dev/null
             # externalMappingFile vazio se nao existir

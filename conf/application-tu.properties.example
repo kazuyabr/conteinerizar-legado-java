@@ -2,11 +2,7 @@
 ################## Application related settings ######################
 # Configuracao PADRAO TU (Teste/Desenvolvimento)
 # Este arquivo e usado quando NAO existe config externa montada
-#
-# INSTRUCOES:
-# 1. Copie este arquivo para application-tu.properties
-# 2. Preencha os valores marcados com <PLACEHOLDER>
-# 3. NAO faca commit do arquivo application-tu.properties (contem credenciais)
+# Valores default apontam para ambiente TU do Bradesco
 
 ##########################################################################
 ################## Monitor Manager related settings ######################
@@ -88,17 +84,21 @@ exception.catalog.file=/WEB-INF/classes/error-catalog.xml
 external.properties=/suportedbdc_config/intranet/npco/application.properties
 
 ################## CONFIGURACAO PARA CONECTORES AWB CWS. ######################
-cws.ipconnector=<IP_CWS>
-cws.portCWS=<PORTA_CWS>
+# Ambiente TU
+cws.ipconnector=10.193.93.48
+cws.portCWS=3130
+cws.protocol=http
+cws.soTimeout=60000
+cws.connectionTimeout=60000
+cws.maxConnections=40
 
 ################## CONFIGURACAO JAAS. ######################
 conectores.login.sso=false
 securityManager.jaas.was.loginModule=BradescoMockLogin
 
 ################## GCC ##################
-service.endpoint.integracao.filenetce=<URL_FILENET_CE>
-service.endpoint.integracao.filenetceimagem=<URL_FILENET_IMAGEM>
-service.endpoint.integracao.facade=<URL_FACADE>
+service.endpoint.integracao.filenetce=https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenet_ce_ws/services/IntegracaoFileNetCE?wsdl
+service.endpoint.integracao.filenetceimagem=https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenetceimagem_ws/services/IntegracaoFileNetCEImagem?wsdl
 service.endpoint.integracao.w3org.xmlschema=http://www.w3.org/2001/XMLSchema
 
 ################## FWOP ########################################
@@ -134,37 +134,42 @@ fwopSessaoAWB.codigoEmpresaOperante=1
 fwopSessaoAWB.codigoIdioma=4
 
 # FWOP Core TU
-fwopConfiguracaoAWB.urlFwopCore=<URL_FWOP>
-
-fwop.parametro.codigo.processo=3
+fwopConfiguracaoAWB.urlFwopCore=http://10.193.103.17/FWOP
+fwop.parametro.codigo.processo=6
 
 ################## CONFIGURACAO BASE DE DADOS ######################
 db.datasource.name=jdbc/intranet_npco_npcod000_oracle
 
 ####################### WEBSERVICE: ###############################
-service.endpoint.integracao.wsde=<URL_WSDE>
-service.endpoint.integracao.change.contasme=<URL_CONTASME>
-service.gcc.id.usuario=<USUARIO_GCC>
-
-################## SEI #######################
-sei.conf.avaliable_filetypes=pdf,txt,odt,xmld,xls,csv,ods,xmls,qif,ofx,ofc,html,xhtml
-sei.conf.xslt_folder=/br/com/bradesco/web/aq/view/sei/xsl
-sei.converter.odstoxslrules=/br/com/bradesco/web/aq/view/sei/custom/odstoxlsrules.xml
-
-################## INTEGRACAO - AS Convivencia Token ######################
-service.endpoint.integracao.convivencia.token.url=<URL_TOKEN>
-service.endpoint.integracao.convivencia.token.client.id=<CLIENT_ID>
-service.endpoint.integracao.convivencia.token.client.secret=<CLIENT_SECRET>
-
-################## WEBSERVICES ######################
-service.endpoint.integracao.change.contasme=<URL_CONTASME>
+service.endpoint.integracao.wsde=http://10.192.60.133:9081/npco_dossie_ws/DossieEletronico?wsdl
+service.endpoint.integracao.change.contasme=http://10.194.57.136:10050/ContasMeService.svc?singleWsdl
 
 ################## USUARIO DE SEGURANCA ##################
-cws.gsegaa.id.usuario=<USUARIO_SEGuranca>
+cws.gsegaa.id.usuario=UAPNPCO
 cws.gsegaa.frmt.usuario=S
 cws.gsegae.id.tp.auten=006
 cws.gsegae.ind.atlz.pswd=N
 cws.frwkgl01.ccanal=502
 cws.frwkgl01.tusuar.segrc=S
 cws.frwkgl01.cidtfd.perif=AutoAtendimento
-cws.gcc.id.usuario=<USUARIO_GCC_MANAGER>
+
+################## USUARIO SISTEMICO ACESSO GCC ##################
+service.npc.id.usuario=intranet_npco_dusrnpc0
+service.gcc.id.usuario=intranet_npco_dusrecm1
+
+################## CONFIGURACAO XFB ######################
+xfb.encoding=ISO-8859-1
+xfb.path=/suportedbdc_resource01/intranet/NPCD/
+xfb.npco.fileName=Arquivo de Consistencia Contratacao - Facilitadoras_{0}_{1}.xls
+
+################## INICIO - CONFIGURACAO GCC ##################
+integracao.filenet.negocio=PROC-DEPTOS
+integracao.filenet.path.cliente=/GCC/Interno/NPC/Cliente/Processos
+integracao.filenet.gccCdPastaProcesso.cliente=23
+integracao.filenet.classname=pstNPCProcesso
+
+integracao.filenet.address=https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenet_ce_ws/services/IntegracaoFileNetCE
+integracao.filenetimagem.address=https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenetceimagem_ws/services/IntegracaoFileNetCEImagem
+integracao.filenetrecords.address=https://ecmweb.unitario.teste.bradesco.com.br/gccn_integracaofilenetceimagem_ws/services/IntegracaoFileNetCEImagem
+
+################## FIM - CONFIGURACAO GCC ##################
