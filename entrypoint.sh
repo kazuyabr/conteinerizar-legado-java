@@ -313,6 +313,10 @@ start_tomcat() {
         # A referencia Eclipse tambem nao possui esse arquivo opcional.
         # Remover somente a referencia ausente, mantendo os beans anotados/JARs.
         if [ -f "$war_dir/WEB-INF/web.xml" ]; then
+            cp "$TEMPLATE_CONF_DIR/faces-docker-legacy.xml" "$war_dir/WEB-INF/faces-docker-legacy.xml" || exit 1
+            if ! grep -q '/WEB-INF/faces-docker-legacy.xml' "$war_dir/WEB-INF/web.xml"; then
+                sed -i 's|/WEB-INF/faces-config.xml,|/WEB-INF/faces-config.xml,/WEB-INF/faces-docker-legacy.xml,|' "$war_dir/WEB-INF/web.xml"
+            fi
             if [ ! -f "$war_dir/WEB-INF/faces-managed-beans-config.xml" ]; then
                 sed -i 's|/WEB-INF/faces-managed-beans-config.xml,\{0,1\}||g' "$war_dir/WEB-INF/web.xml"
             fi

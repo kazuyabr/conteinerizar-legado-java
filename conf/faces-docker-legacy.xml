@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<faces-config xmlns="http://java.sun.com/xml/ns/javaee" version="2.0">
+    <!-- A tag brCommandSearch da AWB 3.0.37 solicita javax.faces.Button,
+         mas seu renderer original e registrado com outro nome. -->
+    <render-kit>
+        <render-kit-id>HTML_BASIC</render-kit-id>
+        <renderer>
+            <component-family>HtmlCommandSearchBradesco</component-family>
+            <renderer-type>javax.faces.Button</renderer-type>
+            <renderer-class>br.com.bradesco.web.aq.view.components.UICommand.renderers.HtmlCommandSearchBradescoRenderer</renderer-class>
+        </renderer>
+    </render-kit>
+</faces-config>
