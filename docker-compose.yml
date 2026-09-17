@@ -7,20 +7,23 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ../:/app/src
+      - ../:/app/src:ro
       - tomcat-webapps:/opt/tomcat/webapps
       - tomcat-logs:/opt/tomcat/logs
+      - tomcat-conf:/conf
+      - tomcat-build:/build
     environment:
       - CATALINA_OPTS=-Xms512m -Xmx2048m -XX:PermSize=256m -XX:MaxPermSize=512m
-      - JAVA_OPTS=-Xms512m -Xmx2048m -XX:PermSize=256m -XX:MaxPermSize=512m
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:8080/npco/ | grep -q 'Banco Bradesco' || exit 1"]
+      test: ["CMD", "/healthcheck.sh"]
       interval: 30s
-      timeout: 10s
+      timeout: 35s
       retries: 3
-      start_period: 180s
+      start_period: 30m
 
 volumes:
   tomcat-webapps:
   tomcat-logs:
+  tomcat-conf:
+  tomcat-build:

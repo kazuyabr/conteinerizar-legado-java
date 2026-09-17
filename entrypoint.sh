@@ -14,6 +14,8 @@ BUILD_SRC="/build/src"
 DEPS_BUILD="/build/deps"
 LOG_FILE="/tmp/entrypoint.log"
 CACHE_MARKER="/build/.build_complete"
+DEPS_MARKER="/build/.deps_complete"
+TEMPLATE_CONF_DIR="/opt/docker-templates/conf"
 
 # ============================================
 # CONFIGURACAO (edite conforme necessario)
@@ -27,6 +29,7 @@ PROJECT_PATTERN="*"
 # Inclui pastas de libs, pastas do Eclipse, e pastas nao-projeto
 # Usar ^ e $ para correspondencia exata quando necessario
 IGNORE_PATTERN="^.*-lib-.*$|^Servers$|^RemoteSystemsTempFiles$|^WDE$|^automation$|^base$|^br$|^docker$|^docker-legacy$|^graft$|^node_modules$|^npco_gestores$"
+ACTIVE_PROJECTS_REGEX="^(npco_base|npco|npco_analise)$"
 
 # Target Ant para WARs (create-war evita EAR)
 WAR_ANT_TARGET="create-war"
@@ -45,6 +48,159 @@ done
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+phase_start() {
+    PHASE_START_TS=$(date +%s)
+    log "--- INICIO: $1 ---"
+}
+
+phase_end() {
+    local label="$1"
+    local now_ts
+    now_ts=$(date +%s)
+    log "--- FIM: $label (duracao: $((now_ts - PHASE_START_TS))s) ---"
+}
+
+remove_incompatible_cdi_jars() {
+    local web_inf_lib="$1"
+    local jar_name
+    for jar_name in \
+        ; do
+        if [ -f "$web_inf_lib/$jar_name" ]; then
+            rm -f "$web_inf_lib/$jar_name"
+            log "JAR removido por incompatibilidade com scanner CDI legado: $jar_name"
+        fi
+    done
+}
+
+remove_incompatible_classdirs() {
+    local web_inf_classes="$1"
+    local bad_dir="$web_inf_classes/br/com/bradesco/web/aq/application/security/intranet/loginmodules/impl"
+    if [ -d "$bad_dir" ]; then
+        rm -f "$bad_dir"/*.class 2>/dev/null || true
+        log "Classes removidas por incompatibilidade com scanner CDI legado: $bad_dir"
+    fi
+}
+
+sanitize_deployed_webapps() {
+    local war_dir
+    for war_dir in "$WEBAPPS_DIR"/*/; do
+        [ -d "$war_dir" ] || continue
+        remove_incompatible_cdi_jars "$war_dir/WEB-INF/lib"
+        remove_incompatible_classdirs "$war_dir/WEB-INF/classes"
+    done
+}
+
+ensure_root_redirect() {
+    local app_dir="$1"
+    local target="$2"
+    mkdir -p "$app_dir"
+    cat > "$app_dir/index.jsp" <<EOF
+<% response.sendRedirect(request.getContextPath() + "$target"); %>
+EOF
+}
+
+recreate_owb_shim() {
+    mkdir -p /tmp/owb-shim/org/apache/webbeans/el
+    cat <<'JAVAEOF' > /tmp/owb-shim/org/apache/webbeans/el/WebBeansELResolver.java
+package org.apache.webbeans.el;
+public class WebBeansELResolver extends org.apache.webbeans.el22.WebBeansELResolver {
+    private static final long serialVersionUID = 1L;
+    public WebBeansELResolver() { super(); }
+}
+JAVAEOF
+    local shim_jar=$(find "$WEBAPPS_DIR" -path "*/openwebbeans-el22-*.jar" -type f 2>/dev/null | head -1)
+    local javac_bin
+    javac_bin=$(command -v javac 2>/dev/null || true)
+    if [ -n "$shim_jar" ]; then
+        if [ -n "$javac_bin" ] && "$javac_bin" -source 1.7 -target 1.7 -cp "$TOMCAT_HOME/lib/el-api.jar:$shim_jar" /tmp/owb-shim/org/apache/webbeans/el/WebBeansELResolver.java && \
+        jar cf /tmp/openwebbeans-el-shim.jar -C /tmp/owb-shim org/apache/webbeans/el/WebBeansELResolver.class; then
+        # OWB pertence ao classloader de cada WAR, junto com suas dependencias.
+        for d in "$WEBAPPS_DIR"/*/WEB-INF/lib; do
+            [ -d "$d" ] || continue
+            cp /tmp/openwebbeans-el-shim.jar "$d/openwebbeans-el-1.2.1.jar" || exit 1
+        done
+        log "Shim openwebbeans-el recriado"
+        else
+            log "ERRO: falha ao criar shim openwebbeans-el; deploy interrompido"
+            exit 1
+        fi
+    fi
+}
+
+start_tomcat_legacy() {
+    # Seed dos templates apenas quando o volume persistente ainda nao foi inicializado
+    if [ ! -f "/conf/application-tu.properties" ] && [ -f "$TEMPLATE_CONF_DIR/application-tu.properties.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/application-tu.properties.example" "/conf/application-tu.properties"
+        apply_tu_defaults "/conf/application-tu.properties"
+        log "Config TU criada a partir do template"
+    fi
+
+    if [ ! -f "/conf/application-tu.properties.example" ] && [ -f "$TEMPLATE_CONF_DIR/application-tu.properties.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/application-tu.properties.example" "/conf/application-tu.properties.example"
+    fi
+
+    if [ ! -f "/conf/context.xml" ] && [ -f "$TEMPLATE_CONF_DIR/context.xml.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/context.xml.example" "/conf/context.xml"
+        log "Context.xml criada a partir do template (preencha com credenciais reais)"
+    fi
+
+    if [ ! -f "/conf/context.xml.example" ] && [ -f "$TEMPLATE_CONF_DIR/context.xml.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/context.xml.example" "/conf/context.xml.example"
+    fi
+
+    mkdir -p "/conf/intranet/npco" "/conf/resources/intranet/NPCD" "$TOMCAT_HOME/logs"
+
+    for war_dir in "$WEBAPPS_DIR"/*/; do
+        [ -d "$war_dir" ] || continue
+        wname=$(basename "$war_dir")
+        case "$wname" in
+            ROOT|manager|host-manager|docs|examples) continue ;;
+        esac
+        if [ -f "$war_dir/WEB-INF/application.properties" ]; then
+            mkdir -p "/conf/intranet/$wname" "/conf/resources/intranet/NPCD" "$TOMCAT_HOME/logs"
+            if [ ! -f "/conf/intranet/$wname/application.properties" ]; then
+                if [ -f "/conf/application-tu.properties" ]; then
+                    cp "/conf/application-tu.properties" "/conf/intranet/$wname/application.properties" 2>/dev/null
+                    apply_tu_defaults "/conf/intranet/$wname/application.properties"
+                    log "Config TU criada para $wname"
+                else
+                    cp "$war_dir/WEB-INF/application.properties" "/conf/intranet/$wname/application.properties" 2>/dev/null
+                    log "Config copiada de WebContent para $wname (sem config TU)"
+                fi
+            fi
+            sed -i "s|^external.properties[[:space:]]*=.*|external.properties=/opt/tomcat/webapps/$wname/WEB-INF/application.properties|" "$war_dir/WEB-INF/application.properties" 2>/dev/null
+            apply_tu_defaults "$war_dir/WEB-INF/application.properties"
+            if [ -f "$war_dir/WEB-INF/classes/logback-catalog.xml" ] && [ ! -f "/conf/intranet/$wname/logback-catalog.xml" ]; then
+                cp "$war_dir/WEB-INF/classes/logback-catalog.xml" "/conf/intranet/$wname/logback-catalog.xml" 2>/dev/null
+                sed -i 's|suportedbdc_logs|/opt/tomcat/logs|g' "/conf/intranet/$wname/logback-catalog.xml" 2>/dev/null
+            fi
+            [ ! -f "/conf/intranet/$wname/externalMappingFile.properties" ] && touch "/conf/intranet/$wname/externalMappingFile.properties" 2>/dev/null
+            if [ -f "/conf/context.xml" ]; then
+                mkdir -p "$war_dir/META-INF"
+                cp "/conf/context.xml" "$war_dir/META-INF/context.xml" 2>/dev/null
+                log "Context.xml injetado em $wname"
+            fi
+            log "Config externa configurada para $wname"
+        fi
+    done
+
+    log "Iniciando Tomcat 7..."
+    log "============================================"
+    log "  RESUMO DO DEPLOY:"
+    log "  - ENDERECO: http://localhost:8080"
+    for dir in "$WEBAPPS_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        name=$(basename "$dir")
+        case "$name" in
+            ROOT|manager|host-manager|docs|examples) continue ;;
+        esac
+        log "    * $name"
+    done
+    log "============================================"
+    cd "$TOMCAT_HOME/bin"
+    exec ./catalina.sh run
 }
 
 # ============================================
@@ -82,20 +238,30 @@ apply_tu_defaults() {
 # FUNCAO: Iniciar Tomcat
 # ============================================
 start_tomcat() {
-    # Sempre criar/atualizar config TU a partir do template (docker self-contained)
-    if [ -f "/conf/application-tu.properties.example" ]; then
-        cp "/conf/application-tu.properties.example" "/conf/application-tu.properties"
+    # Seed dos templates apenas quando o volume persistente ainda nao foi inicializado
+    if [ ! -f "/conf/application-tu.properties" ] && [ -f "$TEMPLATE_CONF_DIR/application-tu.properties.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/application-tu.properties.example" "/conf/application-tu.properties"
         apply_tu_defaults "/conf/application-tu.properties"
-        log "Config TU atualizada a partir do template"
+        log "Config TU criada a partir do template"
     fi
-    
-    # Criar context.xml a partir do example se nao existir
-    if [ ! -f "/conf/context.xml" ] && [ -f "/conf/context.xml.example" ]; then
-        cp "/conf/context.xml.example" "/conf/context.xml"
+
+    if [ ! -f "/conf/application-tu.properties.example" ] && [ -f "$TEMPLATE_CONF_DIR/application-tu.properties.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/application-tu.properties.example" "/conf/application-tu.properties.example"
+    fi
+
+    if [ ! -f "/conf/context.xml" ] && [ -f "$TEMPLATE_CONF_DIR/context.xml.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/context.xml.example" "/conf/context.xml"
         log "Context.xml criada a partir do template (preencha com credenciais reais)"
     fi
+
+    if [ ! -f "/conf/context.xml.example" ] && [ -f "$TEMPLATE_CONF_DIR/context.xml.example" ]; then
+        cp "$TEMPLATE_CONF_DIR/context.xml.example" "/conf/context.xml.example"
+    fi
+
+    # Garantir que a raiz local de configuracao exista antes do deploy
+    mkdir -p "/conf/intranet/npco" "/conf/resources/intranet/NPCD" "$TOMCAT_HOME/logs"
     
-    # Criar diretorios externos de configuracao
+    # Criar diretorios locais de configuracao
     for war_dir in "$WEBAPPS_DIR"/*/; do
         [ -d "$war_dir" ] || continue
         wname=$(basename "$war_dir")
@@ -103,31 +269,61 @@ start_tomcat() {
             ROOT|manager|host-manager|docs|examples) continue ;;
         esac
         if [ -f "$war_dir/WEB-INF/application.properties" ]; then
-            mkdir -p "/suportedbdc_config/intranet/$wname"
-            # Sempre atualizar config externa a partir do template (docker self-contained)
-            if [ -f "/conf/application-tu.properties" ]; then
-                cp "/conf/application-tu.properties" "/suportedbdc_config/intranet/$wname/application.properties" 2>/dev/null
-                apply_tu_defaults "/suportedbdc_config/intranet/$wname/application.properties"
-                log "Config TU atualizada para $wname"
-            else
-                cp "$war_dir/WEB-INF/application.properties" "/suportedbdc_config/intranet/$wname/application.properties" 2>/dev/null
-                log "Config copiada de WebContent para $wname (sem config TU)"
+            mkdir -p "/conf/intranet/$wname" "/conf/resources/intranet/NPCD" "$TOMCAT_HOME/logs"
+            # Criar config local apenas na primeira vez; depois respeitar overrides do volume
+            if [ ! -f "/conf/intranet/$wname/application.properties" ]; then
+                if [ -f "/conf/application-tu.properties" ]; then
+                    cp "/conf/application-tu.properties" "/conf/intranet/$wname/application.properties" 2>/dev/null
+                    apply_tu_defaults "/conf/intranet/$wname/application.properties"
+                    log "Config TU criada para $wname"
+                else
+                    cp "$war_dir/WEB-INF/application.properties" "/conf/intranet/$wname/application.properties" 2>/dev/null
+                    log "Config copiada de WebContent para $wname (sem config TU)"
+                fi
             fi
-            # Corrigir external.properties para caminho completo do arquivo
-            sed -i "s|^external.properties = /suportedbdc_config/intranet/$wname.*|external.properties = /suportedbdc_config/intranet/$wname/application.properties|" "$war_dir/WEB-INF/application.properties" 2>/dev/null
-            # Aplicar defaults TU no config externo (substitui placeholders residuais)
-            apply_tu_defaults "/suportedbdc_config/intranet/$wname/application.properties"
-            # Copiar logback-catalog.xml se existir nas classes
-            [ -f "$war_dir/WEB-INF/classes/logback-catalog.xml" ] && [ ! -f "/suportedbdc_config/intranet/$wname/logback-catalog.xml" ] && cp "$war_dir/WEB-INF/classes/logback-catalog.xml" "/suportedbdc_config/intranet/$wname/logback-catalog.xml" 2>/dev/null
+            # O WAR aponta para a configuracao externa local, como no Eclipse.
+            sed -i "s|^external.properties[[:space:]]*=.*|external.properties=/conf/intranet/$wname/application.properties|" "$war_dir/WEB-INF/application.properties"
+            apply_tu_defaults "/conf/intranet/$wname/application.properties"
+            # Copiar logback-catalog.xml se existir nas classes e remover dependencias de caminho legado
+            if [ -f "$war_dir/WEB-INF/classes/logback-catalog.xml" ] && [ ! -f "/conf/intranet/$wname/logback-catalog.xml" ]; then
+                cp "$war_dir/WEB-INF/classes/logback-catalog.xml" "/conf/intranet/$wname/logback-catalog.xml" 2>/dev/null
+                sed -i 's|suportedbdc_logs|/opt/tomcat/logs|g' "/conf/intranet/$wname/logback-catalog.xml" 2>/dev/null
+            fi
             # externalMappingFile vazio se nao existir
-            [ ! -f "/suportedbdc_config/intranet/$wname/externalMappingFile.properties" ] && touch "/suportedbdc_config/intranet/$wname/externalMappingFile.properties" 2>/dev/null
+            [ ! -f "/conf/intranet/$wname/externalMappingFile.properties" ] && touch "/conf/intranet/$wname/externalMappingFile.properties" 2>/dev/null
             # Injetar context.xml com DataSource Oracle
             if [ -f "/conf/context.xml" ]; then
                 mkdir -p "$war_dir/META-INF"
                 cp "/conf/context.xml" "$war_dir/META-INF/context.xml" 2>/dev/null
+                # O nome JAAS e declarado por cada WAR (LDAPLogin ou MockLogin).
+                local jaas_name
+                jaas_name=$(sed -n 's/^[[:space:]]*\([A-Za-z0-9_]*\)[[:space:]]*{.*/\1/p' "$war_dir/WEB-INF/jaas.config" | head -1)
+                if [ -n "$jaas_name" ]; then
+                    # JAAS global e sobrescrito pelos listeners dos WARs. Isolar por Realm.
+                    cp "$war_dir/WEB-INF/jaas.config" "$war_dir/WEB-INF/classes/docker-legacy-jaas.config" || exit 1
+                    if grep -q 'BradescoIntranetMockLMImpl' "$war_dir/WEB-INF/jaas.config" && [ ! -f "$war_dir/WEB-INF/classes/login-mock.xml" ]; then
+                        cp "$TEMPLATE_CONF_DIR/login-mock.xml" "$war_dir/WEB-INF/classes/login-mock.xml" || exit 1
+                    fi
+                    sed -i "s/appName=\"[^\"]*\"/appName=\"$jaas_name\" configFile=\"docker-legacy-jaas.config\"/" "$war_dir/META-INF/context.xml"
+                fi
                 log "Context.xml injetado em $wname"
             fi
             log "Config externa configurada para $wname"
+        fi
+        # A referencia Eclipse tambem nao possui esse arquivo opcional.
+        # Remover somente a referencia ausente, mantendo os beans anotados/JARs.
+        if [ -f "$war_dir/WEB-INF/web.xml" ]; then
+            if [ ! -f "$war_dir/WEB-INF/faces-managed-beans-config.xml" ]; then
+                sed -i 's|/WEB-INF/faces-managed-beans-config.xml,\{0,1\}||g' "$war_dir/WEB-INF/web.xml"
+            fi
+            sed -i 's|;:/components.taglib.xml|;/components.taglib.xml|g' "$war_dir/WEB-INF/web.xml"
+            if [ ! -f "$war_dir/components.taglib.xml" ]; then
+                if [ -f "$war_dir/WEB-INF/classes/META-INF/components.taglib.xml" ]; then
+                    sed -i 's|;/components.taglib.xml|;/WEB-INF/classes/META-INF/components.taglib.xml|g' "$war_dir/WEB-INF/web.xml"
+                else
+                    sed -i 's|;/components.taglib.xml||g' "$war_dir/WEB-INF/web.xml"
+                fi
+            fi
         fi
     done
 
@@ -152,9 +348,14 @@ start_tomcat() {
 # FUNCAO: Gerar hash das fontes (rapido)
 # ============================================
 source_hash() {
-    local src_dir="$1"
-    # Hash baseado em timestamps dos dirs pai (muito mais rapido que find)
-    find "$src_dir" -maxdepth 2 -name "*.java" -o -name "*.xml" 2>/dev/null | xargs stat -c '%Y' 2>/dev/null | sort | md5sum | cut -d' ' -f1
+    local hash_input=""
+    local project_dir
+    for project_dir in "$@"; do
+        [ -d "$project_dir" ] || continue
+        hash_input="$hash_input $(find "$project_dir/JavaSource" "$project_dir/WebContent" "$project_dir/Empacotamento/Ant" -type f 2>/dev/null | sort | xargs stat -c '%Y %n' 2>/dev/null)"
+        [ -f "$project_dir/WebContent/index.jsp" ] && hash_input="$hash_input $(stat -c '%Y %n' "$project_dir/WebContent/index.jsp" 2>/dev/null)"
+    done
+    printf '%s' "$hash_input" | md5sum | cut -d' ' -f1
 }
 
 # ============================================
@@ -164,11 +365,14 @@ if [ -f "$CACHE_MARKER" ] && [ "$FORCE_REBUILD" = "false" ]; then
     log "Build cache encontrado em $CACHE_MARKER"
     
     # Verificar hash das fontes vs hash salvo
-    CURRENT_HASH=$(source_hash "$SRC_DIR")
+    CURRENT_HASH=$(source_hash "$SRC_DIR/npco_base" "$SRC_DIR/npco" "$SRC_DIR/npco_analise")
     SAVED_HASH=$(cat /build/.source_hash 2>/dev/null || echo "none")
     
     if [ "$CURRENT_HASH" = "$SAVED_HASH" ]; then
         log "Fontes inalteradas (hash: $CURRENT_HASH). Pulando build."
+        sanitize_deployed_webapps
+        ensure_root_redirect "$WEBAPPS_DIR/npco" "/content/index.xhtml"
+        ensure_root_redirect "$WEBAPPS_DIR/npco_analise" "/content/index.xhtml"
         recreate_owb_shim
         start_tomcat
     fi
@@ -223,6 +427,11 @@ for project_dir in "$SRC_DIR"/*/; do
         continue
     fi
 
+    if ! echo "$project_name" | grep -qE "$ACTIVE_PROJECTS_REGEX"; then
+        log "  -> Ignorado (fora do conjunto ativo: $ACTIVE_PROJECTS_REGEX)"
+        continue
+    fi
+
     is_core="false"
     if [ -f "$project_dir/bin/${project_name}.jar" ] || [ -f "$project_dir/target/${project_name}.jar" ]; then
         is_core="true"
@@ -259,36 +468,65 @@ log "WARs: ${#WAR_SRCS[@]}"
 # ============================================
 # COPIAR FONTES P/ FS NATIVO DO CONTAINER
 # ============================================
-log "Copiando dependencias -> $DEPS_BUILD"
-rm -rf "$DEPS_BUILD"
-mkdir -p "$DEPS_BUILD"
-for item in "$DEPS_DIR"/*; do
-    [ -e "$item" ] || continue
-    cp -a "$item" "$DEPS_BUILD/"
-done
+copy_dependency_dir() {
+    local dep_name="$1"
+    if [ -d "$DEPS_DIR/$dep_name" ]; then
+        log "Copiando dependencia: $dep_name -> $DEPS_BUILD/$dep_name"
+        cp -a "$DEPS_DIR/$dep_name" "$DEPS_BUILD/"
+        log "Dependencia copiada: $dep_name"
+    else
+        log "AVISO: dependencia nao encontrada em $DEPS_DIR/$dep_name"
+    fi
+}
+
+if [ -f "$DEPS_MARKER" ] && [ "$FORCE_REBUILD" = "false" ]; then
+    log "Dependencias em cache encontradas em $DEPS_MARKER. Pulando copia."
+else
+    phase_start "Copia de dependencias"
+    log "Copiando dependencias selecionadas -> $DEPS_BUILD"
+    rm -rf "$DEPS_BUILD"
+    mkdir -p "$DEPS_BUILD"
+    copy_dependency_dir "websphere_lib"
+    copy_dependency_dir "intranet_mcnl_corporativo_negocio_v1"
+    copy_dependency_dir "intranet_eint_corporativo_negocio_v3"
+    copy_dependency_dir "intranet_eint_corporativo_sistema_v3"
+    copy_dependency_dir "intranet_npco_base_negocio_v1"
+    copy_dependency_dir "j2ee"
+    copy_dependency_dir "itextpdf"
+    touch "$DEPS_MARKER"
+    phase_end "Copia de dependencias"
+fi
 
 copy_project() {
     local src="$1"
     local name
     name=$(basename "$src")
-    log "Copiando $name -> $BUILD_SRC/$name"
+    log "Copiando projeto $name -> $BUILD_SRC/$name"
     rm -rf "$BUILD_SRC/$name"
     mkdir -p "$BUILD_SRC/$name"
-    for item in "$src"/*; do
-        [ -e "$item" ] || continue
-        local b
-        b=$(basename "$item")
-        case "$b" in
-            bin|target|.git|.claude|graft|node_modules|.gradle|.mvn|.settings|.project|.classpath) continue ;;
-        esac
-        cp -a "$item" "$BUILD_SRC/$name/"
+    local copied_items=0
+    for item in JavaSource WebContent Empacotamento; do
+        if [ -e "$src/$item" ]; then
+            log "  -> copiando $name/$item"
+            cp -a "$src/$item" "$BUILD_SRC/$name/"
+            copied_items=$((copied_items + 1))
+        else
+            log "  -> ausente: $name/$item"
+        fi
     done
+    if [ -f "$src/WebContent/index.jsp" ]; then
+        cp -a "$src/WebContent/index.jsp" "$BUILD_SRC/$name/WebContent/"
+        log "  -> copiando $name/WebContent/index.jsp"
+    fi
+    log "Projeto $name copiado com $copied_items diretorios principais"
 }
 
+phase_start "Copia de fontes"
 copy_project "$CORE_SRC"
 for w in "${WAR_SRCS[@]}"; do
     copy_project "$w"
 done
+phase_end "Copia de fontes"
 
 CORE_PROJECT="$BUILD_SRC/$(basename "$CORE_SRC")"
 WAR_PROJECTS=()
@@ -380,26 +618,6 @@ generate_ant_flags() {
     eval "$output_var=\"\$flags\""
 }
 
-recreate_owb_shim() {
-    mkdir -p /tmp/owb-shim/org/apache/webbeans/el
-    cat > /tmp/owb-shim/org/apache/webbeans/el/WebBeansELResolver.java << 'JAVAEOF'
-package org.apache.webbeans.el;
-public class WebBeansELResolver extends org.apache.webbeans.el22.WebBeansELResolver {
-    private static final long serialVersionUID = 1L;
-    public WebBeansELResolver() { super(); }
-}
-JAVAEOF
-    local shim_jar=$(find "$WEBAPPS_DIR" -path "*/openwebbeans-el22-*.jar" -type f 2>/dev/null | head -1)
-    if [ -n "$shim_jar" ]; then
-        /usr/lib/jvm/zulu7-ca-amd64/bin/javac -cp "/opt/tomcat/lib/el-api.jar:$shim_jar" /tmp/owb-shim/org/apache/webbeans/el/WebBeansELResolver.java 2>/dev/null && \
-        /usr/lib/jvm/zulu7-ca-amd64/bin/jar cf /tmp/openwebbeans-el-shim.jar -C /tmp/owb-shim org/apache/webbeans/el/WebBeansELResolver.class 2>/dev/null && \
-        for d in "$WEBAPPS_DIR"/*/WEB-INF/lib; do
-            [ -d "$d" ] || continue
-            cp /tmp/openwebbeans-el-shim.jar "$d/openwebbeans-el-1.2.1.jar" 2>/dev/null
-        done && log "Shim openwebbeans-el recriado" || log "AVISO: falha ao criar shim openwebbeans-el"
-    fi
-}
-
 # ============================================
 # FASE 2: BUILD DO CORE (JAR)
 # ============================================
@@ -417,6 +635,7 @@ fi
 generate_ant_flags "$CORE_DEPS_XML" "CORE_FLAGS" "" "$CORE_NAME"
 log "CORE_FLAGS: $CORE_FLAGS"
 
+phase_start "Build CORE $CORE_NAME"
 log "Buildando $CORE_NAME com Ant..."
 prepare_build_dir "$CORE_PROJECT"
 cd "$CORE_ANT_DIR"
@@ -427,6 +646,7 @@ if [ $rc -ne 0 ]; then
     log "ERRO: Falha no build do CORE (rc=$rc)"
     exit 1
 fi
+phase_end "Build CORE $CORE_NAME"
 
 CORE_JAR=$(find "$CORE_PROJECT/bin" -name "*.jar" -type f 2>/dev/null | head -1)
 [ -z "$CORE_JAR" ] && CORE_JAR=$(find "$CORE_PROJECT/target" -name "*.jar" -type f 2>/dev/null | head -1)
@@ -470,6 +690,7 @@ for war_dir in "${WAR_PROJECTS[@]}"; do
     generate_ant_flags "$WAR_DEPS_XML" "WAR_FLAGS" "/build/dist/core.jar" "$war_name"
     log "WAR_FLAGS: $WAR_FLAGS"
 
+    phase_start "Build WAR $war_name"
     prepare_build_dir "$war_dir"
     cd "$WAR_ANT_DIR"
     ant $WAR_ANT_TARGET $WAR_FLAGS 2>&1 | tee -a "$LOG_FILE"
@@ -478,6 +699,7 @@ for war_dir in "${WAR_PROJECTS[@]}"; do
     if [ $rc -ne 0 ]; then
         log "ERRO: Falha no build do $war_name (rc=$rc)"
         FAILED_WARS+=("$war_name")
+        phase_end "Build WAR $war_name"
         continue
     fi
 
@@ -485,20 +707,25 @@ for war_dir in "${WAR_PROJECTS[@]}"; do
 
     if [ -n "$WAR_FILE" ]; then
         log "WAR gerado: $WAR_FILE"
+        rm -rf "$WEBAPPS_DIR/$war_name"
         mkdir -p "$WEBAPPS_DIR/$war_name"
         cd "$WEBAPPS_DIR/$war_name"
         unzip -q -o "$WAR_FILE" 2>/dev/null || true
     else
         log "AVISO: WAR nao encontrado para $war_name, usando WebContent + classes"
+        rm -rf "$WEBAPPS_DIR/$war_name"
         mkdir -p "$WEBAPPS_DIR/$war_name"
-        cp -r "$war_dir/WebContent"/* "$WEBAPPS_DIR/$war_name/" 2>/dev/null || true
+            cp -r "$war_dir/WebContent"/* "$WEBAPPS_DIR/$war_name/" 2>/dev/null || true
         if [ -d "$war_dir/Empacotamento/Ant/Dist/classes" ]; then
             mkdir -p "$WEBAPPS_DIR/$war_name/WEB-INF/classes"
             cp -r "$war_dir/Empacotamento/Ant/Dist/classes"/* "$WEBAPPS_DIR/$war_name/WEB-INF/classes/" 2>/dev/null || true
         fi
     fi
 
+    ensure_root_redirect "$WEBAPPS_DIR/$war_name" "/content/index.xhtml"
+
     log "Deploy: $war_name -> $WEBAPPS_DIR/$war_name"
+    phase_end "Build WAR $war_name"
 done
 
 # ============================================
@@ -513,6 +740,7 @@ for war_dir in "${WAR_PROJECTS[@]}"; do
     if [ -d "$WEB_INF_LIB" ]; then
         cp /build/dist/core.jar "$WEB_INF_LIB/$(basename "$CORE_JAR")" 2>/dev/null || true
         log "CORE JAR injetado em $war_name/WEB-INF/lib/"
+        remove_incompatible_cdi_jars "$WEB_INF_LIB"
     fi
 done
 
@@ -521,9 +749,11 @@ done
 # ============================================
 log "=== FASE 5: Finalizando ==="
 recreate_owb_shim
+log "Shim OpenWebBeans processado"
 
 rm -rf "$BUILD_DIR"
 touch "$CACHE_MARKER"
-source_hash "$SRC_DIR" > /build/.source_hash
+source_hash "$SRC_DIR/npco_base" "$SRC_DIR/npco" "$SRC_DIR/npco_analise" > /build/.source_hash
+log "Cache de build atualizado: $CACHE_MARKER"
 
 start_tomcat

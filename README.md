@@ -95,14 +95,15 @@ O `entrypoint.sh` implementa cache de build para otimizar reinicializações:
 
 | Comportamento | Tempo Estimado |
 |---------------|----------------|
-| **1ª execução** | ~15-20 min |
-| **Reinicializações** | ~5 seg |
+| **1ª execução** | depende do volume de fontes, mas cai com staging por projeto |
+| **Reinicializações** | normalmente poucos segundos se o cache estiver válido |
 
 ### Como funciona
 
 1. **1ª execução**: Copia fontes, compila CORE + WARs, deploy no Tomcat
 2. **Marcador**: Cria `/build/.build_complete` após build bem-sucedido
-3. **Reinicializações**: Verifica marcador → pula build → inicia Tomcat
+3. **Reinicializações**: Verifica marcador e hash dos projetos ativos → pula build se nada mudou → inicia Tomcat
+4. **Logs detalhados**: cada fase registra início/fim, projeto copiado, dependência copiada e duração total
 
 ### Forçar rebuild
 
@@ -123,7 +124,7 @@ O `entrypoint.sh` executa automaticamente:
    - CORE = tem `bin/npco_base.jar` ou `target/npco_base.jar`
    - WAR = tem `WebContent/`
    - Ignora `*-lib-*` (pastas de dependências)
-2. **Cópia**: Copia fontes para `/build/src` (FS nativo, não bind mount)
+2. **Cópia**: Copia apenas `npco_base`, `npco` e `npco_analise` para `/build/src` (FS nativo, não bind mount)
 3. **Patch encoding**: Adiciona `encoding="windows-1252"` nos build.xml
 4. **Propriedades Ant**: Gera properties de dependências a partir de `dependencias.xml`
 5. **Build CORE**: Compila npco_base com Ant

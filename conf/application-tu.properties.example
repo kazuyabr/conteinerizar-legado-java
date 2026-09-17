@@ -52,7 +52,7 @@ alertManager.fileEmitter.fileName=alertasFileEmitter.txt
 ######################################################################
 logManager.catalog.path=/WEB-INF/classes/logback-catalog.xml
 logManager.catalog.delay=60
-logManager.catalog.externalPath=/suportedbdc_config/intranet/npco/logback-catalog.xml
+logManager.catalog.externalPath=/conf/intranet/npco/logback-catalog.xml
 logManager.catalog.jvmArgumentName=logbackCatalog
 logManager.catalog.variablePreExternalLocation=apps.config
 
@@ -75,13 +75,13 @@ service.menuProvider.component.path=/WEB-INF/classes/menu-catalog.xml
 
 ################## Mapeamento de Roles da Aplicacao ######################
 securityManager.internalMappingFile=/internalMappingFile.properties
-securityManager.externalMappingFile=/suportedbdc_config/intranet/npco/externalMappingFile.properties
+securityManager.externalMappingFile=/conf/intranet/npco/externalMappingFile.properties
 
 ################## CONFIGURACAO ERROR CATALOG. ######################
 exception.catalog.file=/WEB-INF/classes/error-catalog.xml
 
 ################## CONFIGURACAO APPLICATION EXTERNAL. ######################
-external.properties=/suportedbdc_config/intranet/npco/application.properties
+external.properties=/conf/intranet/npco/application.properties
 
 ################## CONFIGURACAO PARA CONECTORES AWB CWS. ######################
 # Ambiente TU
@@ -159,7 +159,7 @@ service.gcc.id.usuario=intranet_npco_dusrecm1
 
 ################## CONFIGURACAO XFB ######################
 xfb.encoding=ISO-8859-1
-xfb.path=/suportedbdc_resource01/intranet/NPCD/
+xfb.path=/conf/resources/intranet/NPCD/
 xfb.npco.fileName=Arquivo de Consistencia Contratacao - Facilitadoras_{0}_{1}.xls
 
 ################## INICIO - CONFIGURACAO GCC ##################

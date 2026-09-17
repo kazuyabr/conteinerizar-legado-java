@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Conta de desenvolvimento ja utilizada no ambiente de referencia. -->
+<users xmlns="http://www.w3.org/2001/XMLSchema-instance">
+    <userList userDescription="USUARIO DE TESTES NPCO I919852" userName="I919852" userPassword="cambio11">
+        <userGroups groupName="NPCO0001" />
+        <userGroups groupName="NPCO0002" />
+        <userGroups groupName="NPCO0003" />
+        <userGroups groupName="NPCO0005" />
+        <userGroups groupName="NPCO0006" />
+        <userGroups groupName="NPCO0007" />
+        <userGroups groupName="NPCO0008" />
+        <userGroups groupName="NPCO0149" />
+        <userGroups groupName="NPCO0150" />
+    </userList>
+</users>
