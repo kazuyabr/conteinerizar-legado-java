@@ -121,6 +121,22 @@ ensure_root_redirect() {
 EOF
 }
 
+ensure_runtime_status_page() {
+    local root_dir="$WEBAPPS_DIR/ROOT"
+    mkdir -p "$root_dir"
+    cat > "$root_dir/index.jsp" <<EOF
+<%@ page contentType="text/html; charset=UTF-8" %>
+<html>
+<head><title>Docker Legacy</title></head>
+<body>
+  <h1>Docker Legacy pronto</h1>
+  <p>Runtime ativo mesmo sem projetos NPCO publicados.</p>
+  <p>Quando houver fontes e dependencias disponiveis, o container recompila e publica os WARs automaticamente.</p>
+</body>
+</html>
+EOF
+}
+
 recreate_owb_shim() {
     mkdir -p /tmp/owb-shim/org/apache/webbeans/el
     cat <<'JAVAEOF' > /tmp/owb-shim/org/apache/webbeans/el/WebBeansELResolver.java
@@ -476,17 +492,21 @@ for project_dir in "$SRC_DIR"/*/; do
     fi
 done
 
+NO_CORE="false"
+NO_WARS="false"
+
 if [ -z "$CORE_SRC" ]; then
-    log "ERRO: Nenhum projeto CORE (JAR) encontrado!"
-    exit 1
+    NO_CORE="true"
+    log "AVISO: Nenhum projeto CORE (JAR) encontrado. O runtime subira sem compilar WARs."
+else
+    log "CORE: $(basename "$CORE_SRC")"
 fi
 
 if [ ${#WAR_SRCS[@]} -eq 0 ]; then
-    log "ERRO: Nenhum projeto WAR encontrado!"
-    exit 1
+    NO_WARS="true"
+    log "AVISO: Nenhum projeto WAR encontrado. O runtime subira em modo apenas status page."
 fi
 
-log "CORE: $(basename "$CORE_SRC")"
 log "WARs: ${#WAR_SRCS[@]}"
 
 # ============================================
@@ -545,18 +565,25 @@ copy_project() {
     log "Projeto $name copiado com $copied_items diretorios principais"
 }
 
-phase_start "Copia de fontes"
-copy_project "$CORE_SRC"
-for w in "${WAR_SRCS[@]}"; do
-    copy_project "$w"
-done
-phase_end "Copia de fontes"
-
-CORE_PROJECT="$BUILD_SRC/$(basename "$CORE_SRC")"
+CORE_PROJECT=""
 WAR_PROJECTS=()
-for w in "${WAR_SRCS[@]}"; do
-    WAR_PROJECTS+=("$BUILD_SRC/$(basename "$w")")
-done
+
+if [ "$NO_CORE" = "false" ] || [ "$NO_WARS" = "false" ]; then
+    phase_start "Copia de fontes"
+    if [ "$NO_CORE" = "false" ]; then
+        copy_project "$CORE_SRC"
+        CORE_PROJECT="$BUILD_SRC/$(basename "$CORE_SRC")"
+    fi
+    for w in "${WAR_SRCS[@]}"; do
+        copy_project "$w"
+        WAR_PROJECTS+=("$BUILD_SRC/$(basename "$w")")
+    done
+    phase_end "Copia de fontes"
+fi
+
+if [ "$NO_CORE" = "true" ] || [ "$NO_WARS" = "true" ]; then
+    ensure_runtime_status_page
+fi
 
 # ============================================
 # PATCHES AUTOMATICOS
@@ -645,139 +672,137 @@ generate_ant_flags() {
 # ============================================
 # FASE 2: BUILD DO CORE (JAR)
 # ============================================
-log "=== FASE 2: Build do CORE ==="
+if [ "$NO_CORE" = "false" ] && [ "$NO_WARS" = "false" ]; then
+    log "=== FASE 2: Build do CORE ==="
 
-CORE_NAME=$(basename "$CORE_PROJECT")
-CORE_ANT_DIR="$CORE_PROJECT/Empacotamento/Ant"
-CORE_DEPS_XML="$CORE_ANT_DIR/dependencias.xml"
+    CORE_NAME=$(basename "$CORE_PROJECT")
+    CORE_ANT_DIR="$CORE_PROJECT/Empacotamento/Ant"
+    CORE_DEPS_XML="$CORE_ANT_DIR/dependencias.xml"
 
-if [ ! -d "$CORE_ANT_DIR" ]; then
-    log "ERRO: Pasta Ant nao encontrada: $CORE_ANT_DIR"
-    exit 1
-fi
-
-generate_ant_flags "$CORE_DEPS_XML" "CORE_FLAGS" "" "$CORE_NAME"
-log "CORE_FLAGS: $CORE_FLAGS"
-
-phase_start "Build CORE $CORE_NAME"
-log "Buildando $CORE_NAME com Ant..."
-prepare_build_dir "$CORE_PROJECT"
-cd "$CORE_ANT_DIR"
-ant $CORE_ANT_TARGET $CORE_FLAGS 2>&1 | tee -a "$LOG_FILE"
-rc=${PIPESTATUS[0]}
-
-if [ $rc -ne 0 ]; then
-    log "ERRO: Falha no build do CORE (rc=$rc)"
-    exit 1
-fi
-phase_end "Build CORE $CORE_NAME"
-
-CORE_JAR=$(find "$CORE_PROJECT/bin" -name "*.jar" -type f 2>/dev/null | head -1)
-[ -z "$CORE_JAR" ] && CORE_JAR=$(find "$CORE_PROJECT/target" -name "*.jar" -type f 2>/dev/null | head -1)
-[ -z "$CORE_JAR" ] && CORE_JAR=$(find "$CORE_PROJECT/Empacotamento/Ant/Dist" -name "*.jar" -type f 2>/dev/null | head -1)
-
-if [ -z "$CORE_JAR" ]; then
-    log "ERRO: JAR do CORE nao encontrado"
-    exit 1
-fi
-
-log "CORE JAR: $CORE_JAR"
-
-mkdir -p /build/dist
-cp "$CORE_JAR" /build/dist/core.jar
-for deps_dir in "$DEPS_BUILD"/*/; do
-    [ -d "$deps_dir" ] || continue
-    if [ -f "$deps_dir/npco_base.jar" ]; then
-        cp -f "$CORE_JAR" "$deps_dir/npco_base.jar" 2>/dev/null
-    fi
-done
-
-# ============================================
-# FASE 3: BUILD DOS WARs
-# ============================================
-log "=== FASE 3: Build dos WARs ==="
-
-FAILED_WARS=()
-
-for war_dir in "${WAR_PROJECTS[@]}"; do
-    war_name=$(basename "$war_dir")
-    log "--- Buildando: $war_name ---"
-
-    WAR_ANT_DIR="$war_dir/Empacotamento/Ant"
-    WAR_DEPS_XML="$WAR_ANT_DIR/dependencias.xml"
-
-    if [ ! -d "$WAR_ANT_DIR" ]; then
-        log "AVISO: Pasta Ant nao encontrada para $war_name"
-        continue
+    if [ ! -d "$CORE_ANT_DIR" ]; then
+        log "ERRO: Pasta Ant nao encontrada: $CORE_ANT_DIR"
+        exit 1
     fi
 
-    generate_ant_flags "$WAR_DEPS_XML" "WAR_FLAGS" "/build/dist/core.jar" "$war_name"
-    log "WAR_FLAGS: $WAR_FLAGS"
+    generate_ant_flags "$CORE_DEPS_XML" "CORE_FLAGS" "" "$CORE_NAME"
+    log "CORE_FLAGS: $CORE_FLAGS"
 
-    phase_start "Build WAR $war_name"
-    prepare_build_dir "$war_dir"
-    cd "$WAR_ANT_DIR"
-    ant $WAR_ANT_TARGET $WAR_FLAGS 2>&1 | tee -a "$LOG_FILE"
+    phase_start "Build CORE $CORE_NAME"
+    log "Buildando $CORE_NAME com Ant..."
+    prepare_build_dir "$CORE_PROJECT"
+    cd "$CORE_ANT_DIR"
+    ant $CORE_ANT_TARGET $CORE_FLAGS 2>&1 | tee -a "$LOG_FILE"
     rc=${PIPESTATUS[0]}
 
     if [ $rc -ne 0 ]; then
-        log "ERRO: Falha no build do $war_name (rc=$rc)"
-        FAILED_WARS+=("$war_name")
-        phase_end "Build WAR $war_name"
-        continue
+        log "ERRO: Falha no build do CORE (rc=$rc)"
+        exit 1
+    fi
+    phase_end "Build CORE $CORE_NAME"
+
+    CORE_JAR=$(find "$CORE_PROJECT/bin" -name "*.jar" -type f 2>/dev/null | head -1)
+    [ -z "$CORE_JAR" ] && CORE_JAR=$(find "$CORE_PROJECT/target" -name "*.jar" -type f 2>/dev/null | head -1)
+    [ -z "$CORE_JAR" ] && CORE_JAR=$(find "$CORE_PROJECT/Empacotamento/Ant/Dist" -name "*.jar" -type f 2>/dev/null | head -1)
+
+    if [ -z "$CORE_JAR" ]; then
+        log "ERRO: JAR do CORE nao encontrado"
+        exit 1
     fi
 
-    WAR_FILE=$(find "$war_dir/Empacotamento/Ant/Dist" -name "*.war" -type f 2>/dev/null | head -1)
+    log "CORE JAR: $CORE_JAR"
 
-    if [ -n "$WAR_FILE" ]; then
-        log "WAR gerado: $WAR_FILE"
-        rm -rf "$WEBAPPS_DIR/$war_name"
-        mkdir -p "$WEBAPPS_DIR/$war_name"
-        cd "$WEBAPPS_DIR/$war_name"
-        unzip -q -o "$WAR_FILE" 2>/dev/null || true
-    else
-        log "AVISO: WAR nao encontrado para $war_name, usando WebContent + classes"
-        rm -rf "$WEBAPPS_DIR/$war_name"
-        mkdir -p "$WEBAPPS_DIR/$war_name"
-            cp -r "$war_dir/WebContent"/* "$WEBAPPS_DIR/$war_name/" 2>/dev/null || true
-        if [ -d "$war_dir/Empacotamento/Ant/Dist/classes" ]; then
-            mkdir -p "$WEBAPPS_DIR/$war_name/WEB-INF/classes"
-            cp -r "$war_dir/Empacotamento/Ant/Dist/classes"/* "$WEBAPPS_DIR/$war_name/WEB-INF/classes/" 2>/dev/null || true
+    mkdir -p /build/dist
+    cp "$CORE_JAR" /build/dist/core.jar
+    for deps_dir in "$DEPS_BUILD"/*/; do
+        [ -d "$deps_dir" ] || continue
+        if [ -f "$deps_dir/npco_base.jar" ]; then
+            cp -f "$CORE_JAR" "$deps_dir/npco_base.jar" 2>/dev/null
         fi
-    fi
+    done
 
-    ensure_root_redirect "$WEBAPPS_DIR/$war_name" "/content/index.xhtml"
+    log "=== FASE 3: Build dos WARs ==="
+    FAILED_WARS=()
 
-    log "Deploy: $war_name -> $WEBAPPS_DIR/$war_name"
-    phase_end "Build WAR $war_name"
-done
+    for war_dir in "${WAR_PROJECTS[@]}"; do
+        war_name=$(basename "$war_dir")
+        log "--- Buildando: $war_name ---"
 
-# ============================================
-# FASE 4: INJETAR CORE JAR NOS WARs
-# ============================================
-log "=== FASE 4: Injetando CORE JAR nos WARs ==="
+        WAR_ANT_DIR="$war_dir/Empacotamento/Ant"
+        WAR_DEPS_XML="$WAR_ANT_DIR/dependencias.xml"
 
-for war_dir in "${WAR_PROJECTS[@]}"; do
-    war_name=$(basename "$war_dir")
-    WEB_INF_LIB="$WEBAPPS_DIR/$war_name/WEB-INF/lib"
+        if [ ! -d "$WAR_ANT_DIR" ]; then
+            log "AVISO: Pasta Ant nao encontrada para $war_name"
+            continue
+        fi
 
-    if [ -d "$WEB_INF_LIB" ]; then
-        cp /build/dist/core.jar "$WEB_INF_LIB/$(basename "$CORE_JAR")" 2>/dev/null || true
-        log "CORE JAR injetado em $war_name/WEB-INF/lib/"
-        remove_incompatible_cdi_jars "$WEB_INF_LIB"
-    fi
-done
+        generate_ant_flags "$WAR_DEPS_XML" "WAR_FLAGS" "/build/dist/core.jar" "$war_name"
+        log "WAR_FLAGS: $WAR_FLAGS"
 
-# ============================================
-# FASE 5: SHIM + INICIALIZACAO
-# ============================================
-log "=== FASE 5: Finalizando ==="
-recreate_owb_shim
-log "Shim OpenWebBeans processado"
+        phase_start "Build WAR $war_name"
+        prepare_build_dir "$war_dir"
+        cd "$WAR_ANT_DIR"
+        ant $WAR_ANT_TARGET $WAR_FLAGS 2>&1 | tee -a "$LOG_FILE"
+        rc=${PIPESTATUS[0]}
+
+        if [ $rc -ne 0 ]; then
+            log "ERRO: Falha no build do $war_name (rc=$rc)"
+            FAILED_WARS+=("$war_name")
+            phase_end "Build WAR $war_name"
+            continue
+        fi
+
+        WAR_FILE=$(find "$war_dir/Empacotamento/Ant/Dist" -name "*.war" -type f 2>/dev/null | head -1)
+
+        if [ -n "$WAR_FILE" ]; then
+            log "WAR gerado: $WAR_FILE"
+            rm -rf "$WEBAPPS_DIR/$war_name"
+            mkdir -p "$WEBAPPS_DIR/$war_name"
+            cd "$WEBAPPS_DIR/$war_name"
+            unzip -q -o "$WAR_FILE" 2>/dev/null || true
+        else
+            log "AVISO: WAR nao encontrado para $war_name, usando WebContent + classes"
+            rm -rf "$WEBAPPS_DIR/$war_name"
+            mkdir -p "$WEBAPPS_DIR/$war_name"
+            cp -r "$war_dir/WebContent"/* "$WEBAPPS_DIR/$war_name/" 2>/dev/null || true
+            if [ -d "$war_dir/Empacotamento/Ant/Dist/classes" ]; then
+                mkdir -p "$WEBAPPS_DIR/$war_name/WEB-INF/classes"
+                cp -r "$war_dir/Empacotamento/Ant/Dist/classes"/* "$WEBAPPS_DIR/$war_name/WEB-INF/classes/" 2>/dev/null || true
+            fi
+        fi
+
+        ensure_root_redirect "$WEBAPPS_DIR/$war_name" "/content/index.xhtml"
+
+        log "Deploy: $war_name -> $WEBAPPS_DIR/$war_name"
+        phase_end "Build WAR $war_name"
+    done
+
+    log "=== FASE 4: Injetando CORE JAR nos WARs ==="
+    for war_dir in "${WAR_PROJECTS[@]}"; do
+        war_name=$(basename "$war_dir")
+        WEB_INF_LIB="$WEBAPPS_DIR/$war_name/WEB-INF/lib"
+
+        if [ -d "$WEB_INF_LIB" ]; then
+            cp /build/dist/core.jar "$WEB_INF_LIB/$(basename "$CORE_JAR")" 2>/dev/null || true
+            log "CORE JAR injetado em $war_name/WEB-INF/lib/"
+            remove_incompatible_cdi_jars "$WEB_INF_LIB"
+        fi
+    done
+
+    log "=== FASE 5: Finalizando ==="
+    recreate_owb_shim
+    log "Shim OpenWebBeans processado"
+else
+    log "Modo runtime sem build ativo. Publicando pagina de status em ROOT."
+    recreate_owb_shim
+fi
 
 rm -rf "$BUILD_DIR"
-touch "$CACHE_MARKER"
-source_hash "$SRC_DIR/npco_base" "$SRC_DIR/npco" "$SRC_DIR/npco_analise" > /build/.source_hash
-log "Cache de build atualizado: $CACHE_MARKER"
+if [ "$NO_CORE" = "false" ] && [ "$NO_WARS" = "false" ]; then
+    touch "$CACHE_MARKER"
+    source_hash "$SRC_DIR/npco_base" "$SRC_DIR/npco" "$SRC_DIR/npco_analise" > /build/.source_hash
+    log "Cache de build atualizado: $CACHE_MARKER"
+else
+    log "Cache de build nao atualizado porque o runtime entrou em modo status-only"
+fi
 
 start_tomcat
