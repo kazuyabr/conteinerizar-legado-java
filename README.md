@@ -247,6 +247,17 @@ docker compose exec tomcat grep 'encoding=' /build/src/npco_base/Empacotamento/A
 </userList>
 ```
 
+### Precedencia do login-mock.xml
+
+Quando um WAR usa `BradescoIntranetMockLMImpl`, o Docker aplica esta ordem:
+
+1. `WEB-INF/classes/login-mock.xml` do WAR, se existir e estiver valido.
+2. `WEB-INF/login-mock.xml` do WAR, copiado para `WEB-INF/classes`.
+3. `conf/login-mock.xml` do Docker como fallback minimo versionado.
+
+O fallback interno existe para manter o ambiente operante mesmo quando a branch
+do projeto nao empacota o arquivo.
+
 ## Projetos Ignorados
 
 | Projeto | Motivo |

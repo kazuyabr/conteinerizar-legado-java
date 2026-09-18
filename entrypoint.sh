@@ -83,6 +83,26 @@ remove_incompatible_classdirs() {
     fi
 }
 
+ensure_login_mock_file() {
+    local war_dir="$1"
+    local classes_dir="$war_dir/WEB-INF/classes"
+    mkdir -p "$classes_dir"
+
+    if [ -f "$classes_dir/login-mock.xml" ]; then
+        log "login-mock.xml preservado do WAR em $(basename "$war_dir")"
+        return 0
+    fi
+
+    if [ -f "$war_dir/WEB-INF/login-mock.xml" ]; then
+        cp "$war_dir/WEB-INF/login-mock.xml" "$classes_dir/login-mock.xml" || exit 1
+        log "login-mock.xml copiado de WEB-INF para classes em $(basename "$war_dir")"
+        return 0
+    fi
+
+    cp "$TEMPLATE_CONF_DIR/login-mock.xml" "$classes_dir/login-mock.xml" || exit 1
+    log "login-mock.xml fallback aplicado em $(basename "$war_dir")"
+}
+
 sanitize_deployed_webapps() {
     local war_dir
     for war_dir in "$WEBAPPS_DIR"/*/; do
@@ -301,8 +321,8 @@ start_tomcat() {
                 if [ -n "$jaas_name" ]; then
                     # JAAS global e sobrescrito pelos listeners dos WARs. Isolar por Realm.
                     cp "$war_dir/WEB-INF/jaas.config" "$war_dir/WEB-INF/classes/docker-legacy-jaas.config" || exit 1
-                    if grep -q 'BradescoIntranetMockLMImpl' "$war_dir/WEB-INF/jaas.config" && [ ! -f "$war_dir/WEB-INF/classes/login-mock.xml" ]; then
-                        cp "$TEMPLATE_CONF_DIR/login-mock.xml" "$war_dir/WEB-INF/classes/login-mock.xml" || exit 1
+                    if grep -q 'BradescoIntranetMockLMImpl' "$war_dir/WEB-INF/jaas.config"; then
+                        ensure_login_mock_file "$war_dir"
                     fi
                     sed -i "s/appName=\"[^\"]*\"/appName=\"$jaas_name\" configFile=\"docker-legacy-jaas.config\"/" "$war_dir/META-INF/context.xml"
                 fi
